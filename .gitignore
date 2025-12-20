@@ -1,0 +1,10 @@
+*.pyc
+venv/
+Pulumi.dev.yaml/
+Pulumi.*.yaml
+.DS_Store
+.idea/
+.vscode/
+__pycache__/
+.env
+.env.*  
