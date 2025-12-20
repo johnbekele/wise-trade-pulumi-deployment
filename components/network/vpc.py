@@ -10,9 +10,8 @@ class VpcArgs(BaseModel):
     enable_dns_support: Optional[bool] = True
     enable_dns_hostnames: Optional[bool] = True
     tags: Optional[dict] = None
-    public_subnets:List 
-    private_subnets:List
     public_ip_on_launch: bool = True
+    
 
 
 class Vpc(pulumi.ComponentResource):
@@ -57,7 +56,37 @@ class Vpc(pulumi.ComponentResource):
 
                 )
             )
+      
+        # internate gateway
+        self.igw=aws.ec2.InternateGateWay(
+            f"{name}-igw",
+            vpc=self.vpc.id,
+            tags=args.tags,
+            opts=pulumi.ResourceOptions(parent=self)
+        )
+        
+        # public route table 
+        self.public_rt=aws.ec2.RoutTable(
+            f"{name}-public-rt",
+            vpc=self.vpc.id,
+            routes=[{
+                "cidr_block":"0.0.0.0/0",
+                "gateway_id":self.igw.id
+            }],
+            tags=args.tags,
+            opts=pulumi.ResourceOptions(parent=self)
+        )
 
+        #associate public subnet with the public rt 
+        for i , subnet in enumerate(self.public_subnets):
+            aws.ec2.RouteTableAssociation(
+                f"{name}-public-rt-association-{i}",
+                subnet_id=subnet.id,
+                route_table=self.public_rt,
+                opts=pulumi.ResourceOptions(parent=self)
+            )
+            
+        
         
         self.register_outputs({
             "vpc_id": self.vpc.id,
