@@ -5,21 +5,17 @@ from typing import Optional, Dict, List
 
 
 
-
-class ClusterArgs(BaseModel):
-    vpc_id: str
-    private_subnets: List[str]
-    ecs_security_group: str
-    tags: Optional[Dict[str, str]] = None
-
-
 class EcsCluster(pulumi.ComponentResource):
-    def __init__(self,name,args:ClusterArgs,opts=None):
-        super().__init__("custome:ecs:Cluster" ,name ,None ,opts)
+    def __init__(
+            self,
+            name,
+            tags:Optional[Dict[str, str]] = None,
+            opts=None):
+        super().__init__("custom:ecs:Cluster" ,name ,None ,opts)
 
         self.cluster=ecs.Cluster(
             f"{name}-cluster", 
-             tags=args.tags,
+             tags=tags,
             opts=pulumi.ResourceOptions(parent=self)
             )
         

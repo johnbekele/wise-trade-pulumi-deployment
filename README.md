@@ -1,92 +1,426 @@
- # AWS Python S3 Bucket Pulumi Template
+# Wise-Trad Full Stack Deployment on AWS ECS
 
- A minimal Pulumi template for provisioning a single AWS S3 bucket using Python.
+A production-ready Infrastructure-as-Code (IaC) deployment using Pulumi to provision a full stack application on AWS ECS Fargate with Application Load Balancer, VPC networking, and multi-AZ high availability.
 
- ## Overview
+## Overview
 
- This template provisions an S3 bucket (`pulumi_aws.s3.BucketV2`) in your AWS account and exports its ID as an output. It’s an ideal starting point when:
-  - You want to learn Pulumi with AWS in Python.
-  - You need a barebones S3 bucket deployment to build upon.
-  - You prefer a minimal template without extra dependencies.
+This project deploys a containerized full stack application on AWS using:
+- **ECS Fargate** for serverless container orchestration
+- **Application Load Balancer** for traffic distribution
+- **VPC with public/private subnets** across multiple availability zones
+- **Security groups** for network isolation
+- **FastAPI backend** with MongoDB integration
+- **Frontend web application**
 
- ## Prerequisites
+### Architecture
 
- - An AWS account with permissions to create S3 buckets.
- - AWS credentials configured in your environment (for example via AWS CLI or environment variables).
- - Python 3.6 or later installed.
- - Pulumi CLI already installed and logged in.
+```
+Internet
+    ↓
+Application Load Balancer (Port 80)
+    ↓
+Target Group (Port 8000, /health)
+    ↓
+ECS Fargate Tasks (Private Subnets)
+    ├── Frontend Container (Port 80)
+    └── Backend Container (Port 8000, FastAPI)
+            ↓
+        MongoDB (External)
+```
 
- ## Getting Started
+## Prerequisites
 
- 1. Generate a new project from this template:
-    ```bash
-    pulumi new aws-python
-    ```
- 2. Follow the prompts to set your project name and AWS region (default: `us-east-1`).
- 3. Change into your project directory:
-    ```bash
-    cd <project-name>
-    ```
- 4. Preview the planned changes:
-    ```bash
-    pulumi preview
-    ```
- 5. Deploy the stack:
-    ```bash
-    pulumi up
-    ```
- 6. Tear down when finished:
-    ```bash
-    pulumi destroy
-    ```
+- AWS account with appropriate permissions (VPC, ECS, ALB, EC2, IAM)
+- AWS credentials configured locally (AWS CLI or environment variables)
+- Python 3.6 or later
+- Pulumi CLI installed (v3.x or v4.x)
+- Docker images for frontend and backend services
+- MongoDB connection string (MONGO_URI)
 
- ## Project Layout
+## Quick Start
 
- After running `pulumi new`, your directory will look like:
- ```
- ├── __main__.py         # Entry point of the Pulumi program
- ├── Pulumi.yaml         # Project metadata and template configuration
- ├── requirements.txt    # Python dependencies
- └── Pulumi.<stack>.yaml # Stack-specific configuration (e.g., Pulumi.dev.yaml)
- ```
+### 1. Clone and Setup
 
- ## Configuration
+```bash
+# Navigate to the project directory
+cd wise-trad-deployment
 
- This template defines the following config value:
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
- - `aws:region` (string)
-   The AWS region to deploy resources into.
-   Default: `us-east-1`
+# Install dependencies
+pip install -r requirements.txt
+```
 
- View or update configuration with:
- ```bash
- pulumi config get aws:region
- pulumi config set aws:region us-west-2
- ```
+### 2. Configure Stack
 
- ## Outputs
+```bash
+# Login to Pulumi (use local backend or Pulumi Cloud)
+pulumi login
 
- Once deployed, the stack exports:
+# Select or create stack
+pulumi stack select dev
 
- - `bucket_name` — the ID of the created S3 bucket.
+# Configure AWS region (default: eu-north-1)
+pulumi config set aws:region eu-north-1
 
- Retrieve outputs with:
- ```bash
- pulumi stack output bucket_name
- ```
+# Set your MongoDB connection string
+pulumi config set --secret mongoUri mongodb://your-connection-string
+```
 
- ## Next Steps
+### 3. Deploy Infrastructure
 
- - Customize `__main__.py` to add or configure additional resources.
- - Explore the Pulumi AWS SDK: https://www.pulumi.com/registry/packages/aws/
- - Break your infrastructure into modules for better organization.
- - Integrate into CI/CD pipelines for automated deployments.
+```bash
+# Preview changes
+pulumi preview
 
- ## Help and Community
+# Deploy the stack
+pulumi up
 
- If you have questions or need assistance:
- - Pulumi Documentation: https://www.pulumi.com/docs/
- - Community Slack: https://slack.pulumi.com/
- - GitHub Issues: https://github.com/pulumi/pulumi/issues
+# Retrieve outputs (ALB DNS, VPC ID, etc.)
+pulumi stack output
+```
 
- Contributions and feedback are always welcome!
+### 4. Access Your Application
+
+```bash
+# Get the ALB DNS name
+pulumi stack output alb_dns_name
+
+# Access your application
+curl http://<alb-dns-name>
+```
+
+## Project Structure
+
+```
+wise-trad-deployment/
+├── __main__.py                    # Main Pulumi program entry point
+├── Pulumi.yaml                    # Project metadata and configuration
+├── Pulumi.dev.yaml                # Dev stack configuration (eu-north-1)
+├── requirements.txt               # Python dependencies
+├── .gitignore                     # Version control exclusions
+├── components/
+│   ├── network/
+│   │   ├── vpc.py                # VPC, subnets, IGW, route tables
+│   │   └── security_group.py     # ALB and ECS security groups
+│   ├── alb.py                    # Application Load Balancer setup
+│   └── ecs/
+│       ├── cluster.py            # ECS Fargate cluster
+│       └── task.py               # ECS task definitions (in progress)
+└── README.md                      # This file
+```
+
+## Infrastructure Components
+
+### Network Layer
+
+#### VPC Configuration
+- **CIDR Block**: 10.0.0.0/16
+- **Availability Zones**: 2 (for high availability)
+- **Public Subnets**: 2 subnets (10.0.0.0/24, 10.0.1.0/24)
+  - Internet Gateway attached
+  - Public route table (0.0.0.0/0 → IGW)
+  - Auto-assign public IPs enabled
+- **Private Subnets**: 2 subnets for ECS tasks
+- **DNS Support**: Enabled for both DNS names and hostnames
+
+**Outputs**:
+- VPC ID
+- VPC CIDR block
+- Public subnet IDs (list)
+- Private subnet IDs (list)
+
+#### Security Groups
+
+**ALB Security Group**:
+- Inbound: Port 80 (HTTP) from 0.0.0.0/0
+- Outbound: All traffic
+
+**ECS Security Group**:
+- Inbound: Port 8000 from ALB Security Group only
+- Outbound: All traffic
+- Purpose: Isolates ECS tasks from direct internet access
+
+### Load Balancing
+
+#### Application Load Balancer
+- **Type**: Application Load Balancer (Layer 7)
+- **Scheme**: Internet-facing
+- **Subnets**: Deployed in public subnets across multiple AZs
+- **Listener**: Port 80 (HTTP)
+
+**Target Group**:
+- **Port**: 8000 (backend service)
+- **Protocol**: HTTP
+- **Target Type**: IP (for Fargate tasks)
+- **Health Check**: /health endpoint
+
+**Outputs**:
+- ALB ARN
+- ALB DNS name
+- Target Group ARN
+
+### Compute Layer
+
+#### ECS Cluster
+- **Launch Type**: Fargate (serverless)
+- **Networking**: Deployed in private subnets
+- **Security**: ECS security group attached
+
+#### ECS Task Definition (In Progress)
+- **CPU**: 512 CPU units (0.5 vCPU)
+- **Memory**: 1024 MB (1 GB)
+- **Network Mode**: awsvpc (required for Fargate)
+
+**Containers**:
+1. **Frontend Container**
+   - Port: 80
+   - Web application interface
+
+2. **Backend Container**
+   - Port: 8000
+   - Framework: FastAPI
+   - Environment: MONGO_URI (MongoDB connection)
+
+**Outputs**:
+- ECS Cluster ARN
+- Task Definition ARN
+
+## Configuration
+
+### Stack Configuration (Pulumi.dev.yaml)
+
+```yaml
+config:
+  aws:region: eu-north-1  # Stockholm region
+  # Add custom configuration as needed
+```
+
+### Manage Configuration
+
+```bash
+# View current configuration
+pulumi config
+
+# Set AWS region
+pulumi config set aws:region eu-north-1
+
+# Set secrets (encrypted in stack config)
+pulumi config set --secret mongoUri mongodb://your-connection-string
+
+# Get specific config value
+pulumi config get aws:region
+```
+
+## Deployment Workflow
+
+### Initial Deployment
+
+1. Set up AWS credentials
+2. Install dependencies
+3. Configure stack (region, secrets)
+4. Run `pulumi up`
+5. Verify resources in AWS Console
+
+### Update Existing Stack
+
+```bash
+# Make code changes
+# Preview changes
+pulumi preview
+
+# Apply updates
+pulumi up
+
+# Rollback if needed
+pulumi refresh
+```
+
+### Destroy Infrastructure
+
+```bash
+# Remove all resources
+pulumi destroy
+
+# Remove stack entirely
+pulumi stack rm dev
+```
+
+## Outputs
+
+After deployment, retrieve outputs:
+
+```bash
+# View all outputs
+pulumi stack output
+
+# Specific outputs
+pulumi stack output alb_dns_name      # ALB public endpoint
+pulumi stack output vpc_id            # VPC identifier
+pulumi stack output cluster_arn       # ECS cluster ARN
+pulumi stack output target_group_arn  # ALB target group ARN
+```
+
+## High Availability & Scaling
+
+### Current Configuration
+- **Multi-AZ Deployment**: Resources span 2 availability zones
+- **Load Balancing**: ALB distributes traffic across tasks
+- **Health Checks**: Automatic task health monitoring via /health endpoint
+
+### Future Enhancements
+- Auto-scaling policies for ECS tasks
+- CloudWatch alarms and monitoring
+- NAT Gateway for private subnet internet access
+- RDS or DocumentDB for managed database
+- WAF integration for security
+- SSL/TLS certificates via ACM
+
+## Monitoring and Debugging
+
+### View ECS Tasks
+
+```bash
+# List running tasks
+aws ecs list-tasks --cluster <cluster-name> --region eu-north-1
+
+# Describe task
+aws ecs describe-tasks --cluster <cluster-name> --tasks <task-arn> --region eu-north-1
+```
+
+### Check ALB Health
+
+```bash
+# Describe target health
+aws elbv2 describe-target-health --target-group-arn <target-group-arn> --region eu-north-1
+```
+
+### View Logs
+
+- Navigate to AWS CloudWatch Logs
+- Look for log groups matching your ECS task definitions
+- Filter by task ID or time range
+
+## Known Issues & TODO
+
+### Current Status
+- ✅ VPC with multi-AZ public/private subnets
+- ✅ Internet Gateway and routing
+- ✅ ALB with target group and listener
+- ✅ ECS Cluster creation
+- ✅ Security groups configuration
+- ⚠️ ECS Task Definition (incomplete, has syntax errors)
+- ❌ IAM roles for ECS task execution
+- ❌ Container image configuration
+- ❌ CI/CD pipeline integration
+- ❌ Domain name and SSL/TLS setup
+
+### Code Issues to Fix
+- [vpc.py](components/network/vpc.py): Typo `availabilitiy_zone` → `availability_zone`
+- [alb.py](components/alb.py): Missing comma after `health_check` dictionary
+- [task.py](components/ecs/task.py): Multiple syntax errors, incomplete implementation
+- [security_group.py](components/network/security_group.py): Typos `protocl` → `protocol`, `cird_blocks` → `cidr_blocks`
+
+## Security Best Practices
+
+✅ **Currently Implemented**:
+- ECS tasks in private subnets (no direct internet access)
+- Security groups with least-privilege access
+- ALB as single public entry point
+- Secrets stored encrypted in Pulumi config
+
+🔒 **Recommended Additions**:
+- Enable VPC Flow Logs
+- Implement AWS WAF rules
+- Use AWS Secrets Manager for credentials
+- Enable container image scanning (ECR)
+- Configure IAM roles with minimal permissions
+- Enable CloudTrail for audit logging
+- Use HTTPS with ACM certificates
+
+## Cost Optimization
+
+- **Fargate**: Pay only for vCPU and memory used
+- **ALB**: Charged per hour + LCU (Load Balancer Capacity Units)
+- **VPC**: NAT Gateway charges (if added)
+- **Data Transfer**: Outbound data transfer costs
+
+**Estimated Monthly Cost** (eu-north-1):
+- ECS Fargate (2 tasks, 0.5 vCPU, 1GB): ~$30-40
+- ALB: ~$20-25
+- Data Transfer: Variable
+- **Total**: ~$50-70/month (excluding database)
+
+## Troubleshooting
+
+### Tasks Not Starting
+- Check IAM roles and permissions
+- Verify container images are accessible
+- Check security group rules
+- Review CloudWatch logs
+
+### ALB Health Check Failing
+- Ensure /health endpoint exists in backend
+- Verify port 8000 is exposed in container
+- Check ECS task security group allows ALB traffic
+
+### Cannot Access Application
+- Verify ALB security group allows port 80 inbound
+- Check ALB is in public subnets
+- Ensure target group has healthy targets
+- Confirm route table and IGW configuration
+
+## CI/CD Integration
+
+### GitHub Actions Example
+
+```yaml
+name: Deploy to ECS
+on:
+  push:
+    branches: [main]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: pulumi/actions@v4
+        with:
+          command: up
+          stack-name: dev
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+```
+
+## References
+
+- [Pulumi AWS Documentation](https://www.pulumi.com/registry/packages/aws/)
+- [AWS ECS Fargate Documentation](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/AWS_Fargate.html)
+- [Pulumi Python SDK](https://www.pulumi.com/docs/reference/pkg/python/)
+- [AWS VPC Best Practices](https://docs.aws.amazon.com/vpc/latest/userguide/vpc-best-practices.html)
+
+## Support
+
+For issues or questions:
+- Review AWS CloudWatch logs
+- Check Pulumi stack state: `pulumi stack`
+- Pulumi Community Slack: https://slack.pulumi.com/
+- AWS Support: https://console.aws.amazon.com/support
+
+## License
+
+[Specify your license here]
+
+## Contributors
+
+[Add contributor information]
+
+---
+
+**Last Updated**: 2025-12-21
+**Pulumi Version**: 3.0.0 - 4.0.0
+**AWS Region**: eu-north-1 (Stockholm)

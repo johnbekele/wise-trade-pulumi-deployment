@@ -1,60 +1,53 @@
-from typing import Awaitable
 import pulumi
-from pulumi.output import Inputs
-from pulumi_aws import aws 
-from pydantic import BaseModel
-from typing import Dict ,Optional
-
-class SecurityArgs(BaseModel):
-    vpc_id:str
-    tags:Optional[Dict[str ,str]]
-
+import pulumi_aws as aws
 
 class SecurityGroups(pulumi.ComponentResource):
-    def __init__(self,name ,args:SecurityArgs ,opts=None):
-        super().__init__("custome:security:SecurityGroups" ,name , None ,opts)
+    def __init__(self, name, vpc_id, opts=None):
+        super().__init__("custom:security:SecurityGroups", name, None, opts)
 
-
-        #SG for elb
-
-        self.alb_sg=aws.ec2.SecurityGroup(
-            f"{name}-alb-security-group",
-            vpc_id=args.vpc_id,
-            description="allow HTTP internate access",
+        # ALB SG
+        self.alb_sg = aws.ec2.SecurityGroup(
+            f"{name}-alb-sg",
+            vpc_id=vpc_id,
+            description="Allow HTTP from internet",
             ingress=[{
-                "protocl":"tcp",
-                "from_port":80,
-                "to_port":80,
-                "cird_blocks":["0.0.0.0/0"]
+                "protocol": "tcp",
+                "from_port": 80,
+                "to_port": 80,
+                "cidr_blocks": ["0.0.0.0/0"]
             }],
             egress=[{
-                "protocol":"-1",
-                "port":0,
-                "to_port":0,
-                "cird_blocks":["0.0.0.0/0"]
+                "protocol": "-1",
+                "from_port": 0,
+                "to_port": 0,
+                "cidr_blocks": ["0.0.0.0/0"]
             }],
-            tags=args.tags,
+            tags={"Name": f"{name}-alb-sg"},
             opts=pulumi.ResourceOptions(parent=self)
         )
 
-        #SG for ECS running fast api
-        self.ecs_sg=aws.ec2.SecurityGroup(
-            f"{name}-ecs-security-group",
-            description="Allow traffic from ALB ",
+        # ECS SG
+        self.ecs_sg = aws.ec2.SecurityGroup(
+            f"{name}-ecs-sg",
+            vpc_id=vpc_id,
+            description="Allow traffic from ALB",
             ingress=[{
-                "protocol":"tcp",
-                "from_port":8000,
-                "to_port":8000,
-                "security_groups":[self.alb_sg.id]
+                "protocol": "tcp",
+                "from_port": 8000,
+                "to_port": 8000,
+                "security_groups": [self.alb_sg.id]
             }],
             egress=[{
-                "protocol":"-1",
-                "from_port":0,
-                "to_port":0,
-                "cidr_blocks":["0.0.0.0/0"]
+                "protocol": "-1",
+                "from_port": 0,
+                "to_port": 0,
+                "cidr_blocks": ["0.0.0.0/0"]
             }],
-            tags=args.tags,
+            tags={"Name": f"{name}-ecs-sg"},
             opts=pulumi.ResourceOptions(parent=self)
         )
 
-
+        self.register_outputs({
+            "alb_sg": self.alb_sg.id,
+            "ecs_sg": self.ecs_sg.id
+        })
