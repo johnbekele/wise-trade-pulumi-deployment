@@ -24,8 +24,19 @@ phases:
         echo "Starting build for commit $GITHUB_SHA"
         echo "Branch: $GITHUB_REF"
         echo "Repository: $GITHUB_REPOSITORY"
-      - echo "Logging in to AWS ECR..."
-      - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+      - |
+        # Get AWS Account ID if not set
+        if [ -z "$AWS_ACCOUNT_ID" ]; then
+          export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          echo "AWS Account ID: $AWS_ACCOUNT_ID"
+        fi
+      - |
+        if [ -n "$AWS_ACCOUNT_ID" ]; then
+          echo "Logging in to AWS ECR..."
+          aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+        else
+          echo "AWS_ACCOUNT_ID not set, skipping ECR login"
+        fi
       - |
         if [ -n "$DOCKER_HUB_TOKEN" ]; then
           echo "Logging in to Docker Hub..."

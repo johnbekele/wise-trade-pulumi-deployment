@@ -1,11 +1,10 @@
-# This workflow is no longer needed when using CodeBuild webhook integration
-# CodeBuild will be triggered directly by GitHub webhooks
+# CodeBuild is triggered directly by GitHub webhooks
+# No AWS credentials needed in GitHub Actions
 # 
-# To set up webhook integration:
-# 1. In AWS CodeBuild console, configure your project source as GitHub
-# 2. Connect your GitHub account via OAuth or use a Personal Access Token
-# 3. Enable webhook triggers in CodeBuild project settings
-# 4. CodeBuild will automatically trigger on push events
+# To verify webhook is working:
+# 1. Check GitHub repository Settings → Webhooks
+# 2. Verify CodeBuild webhook is active and receiving events
+# 3. Check AWS CodeBuild console for build status
 
 name: Build and Deploy with CodeBuild
 
@@ -21,8 +20,17 @@ jobs:
     name: CodeBuild Webhook Info
     runs-on: ubuntu-latest
     steps:
-      - name: Info
+      - name: CodeBuild Webhook Information
         run: |
-          echo "CodeBuild is triggered directly via GitHub webhook"
-          echo "No AWS credentials needed in GitHub Actions"
-          echo "Check AWS CodeBuild console for build status"
+          echo "🔔 CodeBuild is triggered directly via GitHub webhook"
+          echo "📦 Commit: ${{ github.sha }}"
+          echo "🌿 Branch: ${{ github.ref }}"
+          echo ""
+          echo "✅ No AWS credentials needed in GitHub Actions"
+          echo "📊 Check AWS CodeBuild console for build status:"
+          echo "   https://eu-north-1.console.aws.amazon.com/codesuite/codebuild/projects/wise-trader-delpoyement"
+          echo ""
+          echo "🔍 To verify webhook is working:"
+          echo "   1. Go to GitHub → Settings → Webhooks"
+          echo "   2. Look for CodeBuild webhook"
+          echo "   3. Check recent deliveries"
