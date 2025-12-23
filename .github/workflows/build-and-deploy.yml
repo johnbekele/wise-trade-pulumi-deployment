@@ -1,0 +1,28 @@
+# This workflow is no longer needed when using CodeBuild webhook integration
+# CodeBuild will be triggered directly by GitHub webhooks
+# 
+# To set up webhook integration:
+# 1. In AWS CodeBuild console, configure your project source as GitHub
+# 2. Connect your GitHub account via OAuth or use a Personal Access Token
+# 3. Enable webhook triggers in CodeBuild project settings
+# 4. CodeBuild will automatically trigger on push events
+
+name: Build and Deploy with CodeBuild
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  info:
+    name: CodeBuild Webhook Info
+    runs-on: ubuntu-latest
+    steps:
+      - name: Info
+        run: |
+          echo "CodeBuild is triggered directly via GitHub webhook"
+          echo "No AWS credentials needed in GitHub Actions"
+          echo "Check AWS CodeBuild console for build status"

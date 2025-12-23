@@ -1,0 +1,120 @@
+version: 0.2
+
+env:
+  variables:
+    AWS_REGION: "eu-north-1"
+    PULUMI_STACK: "dev"
+    DOCKER_HUB_USERNAME: "johnbekele1202"
+    BACKEND_REPO: "https://github.com/johnbekele/wise-Trade.git"
+    FRONTEND_REPO: "https://github.com/johnbekele/wise-Trade-Client.git"
+  secrets-manager:
+    MONGO_URI: "wise-trade/mongo-uri:MONGO_URI"
+    PULUMI_ACCESS_TOKEN: "wise-trade/pulumi-token:PULUMI_ACCESS_TOKEN"
+    DOCKER_HUB_TOKEN: "wise-trade/docker-hub-token:DOCKER_HUB_TOKEN"
+
+phases:
+  pre_build:
+    commands:
+      - |
+        # Use CodeBuild's built-in GitHub variables (available when triggered by webhook)
+        export GITHUB_SHA="${CODEBUILD_SOURCE_VERSION:-$(git rev-parse HEAD)}"
+        export GITHUB_REF="${CODEBUILD_WEBHOOK_HEAD_REF:-refs/heads/main}"
+        export GITHUB_REPOSITORY="${CODEBUILD_SOURCE_REPO_URL#https://github.com/}"
+        export GITHUB_REPOSITORY="${GITHUB_REPOSITORY%.git}"
+        echo "Starting build for commit $GITHUB_SHA"
+        echo "Branch: $GITHUB_REF"
+        echo "Repository: $GITHUB_REPOSITORY"
+      - echo "Logging in to AWS ECR..."
+      - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+      - |
+        if [ -n "$DOCKER_HUB_TOKEN" ]; then
+          echo "Logging in to Docker Hub..."
+          echo $DOCKER_HUB_TOKEN | docker login --username $DOCKER_HUB_USERNAME --password-stdin
+        fi
+      - echo "Setting up Docker Buildx..."
+      - docker buildx create --use || true
+      - |
+        SHORT_SHA=$(echo $GITHUB_SHA | cut -c1-7)
+        TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+        if [ -n "$AWS_ACCOUNT_ID" ]; then
+          export BACKEND_IMAGE="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/wise-trad-backend:$SHORT_SHA"
+          export FRONTEND_IMAGE="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/wise-trad-frontend:$SHORT_SHA"
+        else
+          export BACKEND_IMAGE="$DOCKER_HUB_USERNAME/wise-trad-backend:$SHORT_SHA"
+          export FRONTEND_IMAGE="$DOCKER_HUB_USERNAME/wise-trad-frontend:$SHORT_SHA"
+        fi
+        echo "Backend image: $BACKEND_IMAGE"
+        echo "Frontend image: $FRONTEND_IMAGE"
+        echo "export BACKEND_IMAGE=$BACKEND_IMAGE" >> /tmp/image_tags.sh
+        echo "export FRONTEND_IMAGE=$FRONTEND_IMAGE" >> /tmp/image_tags.sh
+      - source /tmp/image_tags.sh
+
+  build:
+    commands:
+      - echo "Cloning backend repository..."
+      - git clone $BACKEND_REPO backend || echo "Backend repo already cloned"
+      - echo "Cloning frontend repository..."
+      - git clone $FRONTEND_REPO frontend || echo "Frontend repo already cloned"
+      - |
+        if [ -n "$AWS_ACCOUNT_ID" ]; then
+          echo "Creating ECR repositories if they don't exist..."
+          aws ecr describe-repositories --repository-names wise-trad-backend --region $AWS_REGION || \
+          aws ecr create-repository --repository-name wise-trad-backend --region $AWS_REGION --image-scanning-configuration scanOnPush=true
+          aws ecr describe-repositories --repository-names wise-trad-frontend --region $AWS_REGION || \
+          aws ecr create-repository --repository-name wise-trad-frontend --region $AWS_REGION --image-scanning-configuration scanOnPush=true
+        fi
+      - echo "Building backend Docker image..."
+      - cd backend
+      - docker build -t $BACKEND_IMAGE -t ${BACKEND_IMAGE%:*}:latest .
+      - docker push $BACKEND_IMAGE
+      - docker push ${BACKEND_IMAGE%:*}:latest
+      - cd ..
+      - echo "Building frontend Docker image..."
+      - cd frontend
+      - docker build -t $FRONTEND_IMAGE -t ${FRONTEND_IMAGE%:*}:latest .
+      - docker push $FRONTEND_IMAGE
+      - docker push ${FRONTEND_IMAGE%:*}:latest
+      - cd ..
+      - echo "Setting up Python environment..."
+      - python3 -m pip install --upgrade pip
+      - pip install -r requirements.txt
+      - echo "Installing Pulumi CLI..."
+      - curl -fsSL https://get.pulumi.com | sh
+      - export PATH="$HOME/.pulumi/bin:$PATH"
+      - echo "Configuring Pulumi..."
+      - |
+        if [ -n "$PULUMI_ACCESS_TOKEN" ]; then
+          pulumi login --token $PULUMI_ACCESS_TOKEN
+        else
+          pulumi login file://~
+        fi
+      - pulumi stack select $PULUMI_STACK || pulumi stack init $PULUMI_STACK
+      - echo "Updating Pulumi configuration..."
+      - pulumi config set frontend_image $FRONTEND_IMAGE
+      - pulumi config set backend_image $BACKEND_IMAGE
+      - |
+        if ! pulumi config get mongoUri > /dev/null 2>&1; then
+          pulumi config set --secret mongoUri "$MONGO_URI"
+        fi
+      - |
+        if ! pulumi config get project_name > /dev/null 2>&1; then
+          pulumi config set project_name wise-trad-deployment
+        fi
+      - pulumi config set aws:region $AWS_REGION
+      - echo "Previewing Pulumi changes..."
+      - pulumi preview --non-interactive || true
+
+  post_build:
+    commands:
+      - echo "Deploying with Pulumi..."
+      - pulumi up --yes --non-interactive
+      - echo "Getting deployment URL..."
+      - DEPLOYMENT_URL=$(pulumi stack output url 2>/dev/null || echo "Not available")
+      - echo "Deployment URL: $DEPLOYMENT_URL"
+      - echo "Build completed successfully!"
+
+artifacts:
+  files:
+    - '**/*'
+  name: deployment-$(date +%Y-%m-%d)
+

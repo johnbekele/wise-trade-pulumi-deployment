@@ -12,10 +12,11 @@ from components.alb import Alb
 from components.ecs.cluster import EcsCluster
 from components.ecs.service import EcsService, EcsServiceArgs
 from components.ecs.task import TaskDefinition , TaskArgs
+from components.iam.ecs_roles import EcsRoles
 
 
 config=Config()
-mongo_uri="https://"+config.require("mongoUri")
+mongo_uri=config.require("mongoUri")
 frontend_image=config.require("frontend_image")
 backend_image=config.require("backend_image")
 project_name=config.require("project_name")
@@ -58,6 +59,14 @@ alb=Alb(
 )
 
 #===============================================================================
+# IAM Roles for ECS
+#===============================================================================
+ecs_roles = EcsRoles(
+    project_name,
+    tags=tags
+)
+
+#===============================================================================
 # ECS Cluster
 #===============================================================================
 ecs_cluster=EcsCluster(
@@ -73,7 +82,7 @@ task=TaskDefinition(
         mongo_uri=mongo_uri,
         frontend_image=frontend_image,
         backend_image=backend_image,
-    
+        execution_role_arn=ecs_roles.execution_role_arn
     ))
 #===============================================================================
 # ECS Service
