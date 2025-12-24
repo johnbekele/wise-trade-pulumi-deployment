@@ -119,9 +119,10 @@ phases:
     commands:
       - echo "Deploying with Pulumi..."
       - pulumi up --yes --non-interactive
-      - echo "Getting deployment URL..."
-      - DEPLOYMENT_URL=$(pulumi stack output url 2>/dev/null || echo "Not available")
-      - echo "Deployment URL: $DEPLOYMENT_URL"
+      - |
+        echo "Getting deployment URL..."
+        DEPLOYMENT_URL=$(pulumi stack output url 2>/dev/null || echo "Not available")
+        echo "Deployment URL: $DEPLOYMENT_URL"
       - echo "Build completed successfully!"
 
 artifacts:
